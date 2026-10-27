@@ -24,18 +24,22 @@ Technical test for the bank. The orchestrator must be an LLM agent (not plain co
 - Orchestrator = LLM agent with sub-agents as tools; policy enforced in code as a guardrail (user rejected code-only orchestrator).
 - `typescript@5.9` chosen over 7.x for toolchain stability.
 - Env loading via Node `--env-file-if-exists` (no dotenv); App Service uses App Settings.
+- Models: small model for sub-agents, large model for orchestrator (user request: "luna" / "terra 6.1"). "terra 6.1" not found in any source; third-party sources list `gpt-5.6-luna` / `gpt-5.6-terra` (no official OpenAI page found). Configurable via `SUBAGENT_MODEL` / `ORCHESTRATOR_MODEL`, defaults `gpt-5.6-luna` / `gpt-5.6-terra`; confirm with `GET /v1/models` once the key is available.
+- Tracing export to OpenAI disabled by default (PII: names, document IDs); opt-in via `OPENAI_AGENTS_TRACING=1`.
+- Tools cross-check LLM-supplied args (document_id, name, product) against the request in `RunContext`; mismatch is rejected and traced.
+- Fail-safe: any agent/runtime failure or guardrail trip → `escalated`, never `approved`.
 
 ## TDD
 - Mode: strict (source: global agent config `Strict TDD Mode: enabled`).
 - Runner: `npx vitest run`.
 
 ## Delivery
-- Strategy: `ask-on-risk`. Forecast ~900 authored lines total → will ask chain strategy before exceeding ~400 on the branch.
+- Strategy: `single-pr` (exception to ~400-line budget): quick technical test, no remote/PR yet, user asked for agility. Forecast ~900 authored lines; one work-unit commit per task keeps history reviewable.
 - RDD: off (global) — ordinary checks only.
 
 ## Tasks
 - [x] T1 Scaffold: git, TS, Express 5 app factory, `/health`, static `public/`, vitest + supertest, App Service-ready scripts. Route: inline (mechanical config files). Evidence: RED (missing `src/app.ts` import) → GREEN 2/2 tests; `typecheck` OK; `build` OK; `PORT=3999 node dist/server.js` → `/health` `{"status":"ok"}`. Commit: see git log `feat: scaffold onboarding service`. Note: `.env.example` blocked by local permission settings; env vars go in README.
-- [ ] T2 zod schemas + mock tools + `policy.ts` (TDD on rules). Route: TBD.
+- [x] T2 zod schemas + mock tools + `policy.ts` (TDD on rules). Route: delegated writer. Evidence: RED (3 new test files failed on missing modules) → GREEN 39/39 tests (`npx vitest run`); `npm run typecheck` OK; `npm run build` OK. Policy precedence: escalated > rejected (high risk + failed identity goes to compliance). Guardrail allows model to be more conservative only (approved→{approved,escalated}, escalated→{escalated}, rejected→{rejected,escalated}). Commit: see git log `feat: add schemas, mock tools and policy rules`.
 - [ ] T3 Four sub-agents with prompts and typed outputs. Route: TBD.
 - [ ] T4 Orchestrator agent + policy output guardrail + `escalate_to_human`. Route: TBD.
 - [ ] T5 Endpoint wiring + e2e tests per scenario (approved, doubtful identity, high risk) with mocked model. Route: TBD.
@@ -49,7 +53,7 @@ Technical test for the bank. The orchestrator must be an LLM agent (not plain co
 - `npm run build && npm start` works with `PORT` from env.
 
 ## Progress
-- T1 done. Authored lines on branch: ~150.
+- T1, T2 done. Authored lines on branch: ~700 (T2 incl. tests).
 
 ## Next step
-T2 (needs OPENAI_API_KEY / OPENAI_MODEL only from T3 onward; T2 is model-free). T7 blocked on Azure params + authorization.
+T3 (sub-agents). Tests use a scripted fake Model; no API key needed. T7 blocked on Azure params + authorization.
