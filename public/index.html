@@ -3,10 +3,214 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Digital Onboarding</title>
+    <title>Onboarding Digital</title>
+    <style>
+      :root {
+        --bg: #f4f5f7; --card: #fff; --text: #1d2433; --muted: #5d6679; --border: #d9dde5;
+        --primary: #0b4fa8; --ok: #1b7f4b; --ok-bg: #e3f5ea; --bad: #b3261e; --bad-bg: #fbe7e5;
+        --warn: #9a6200; --warn-bg: #fff1d6;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #11151c; --card: #1a202b; --text: #e8ebf1; --muted: #9aa3b5; --border: #2c3544;
+          --primary: #5b9bf0; --ok: #62d394; --ok-bg: #12301f; --bad: #ff8a80; --bad-bg: #3a1815;
+          --warn: #f2b84b; --warn-bg: #36280d;
+        }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 16px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+      main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+      h1 { font-size: 1.5rem; margin: 0 0 4px; }
+      h2 { font-size: 1.05rem; margin: 20px 0 6px; }
+      .sub { color: var(--muted); margin: 0 0 20px; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+      label { display: block; font-weight: 600; margin: 12px 0 4px; }
+      input, select { width: 100%; padding: 10px; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+      button { font: inherit; cursor: pointer; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); padding: 8px 12px; }
+      button.primary { background: var(--primary); border-color: var(--primary); color: #fff; width: 100%; margin-top: 16px; padding: 12px; font-weight: 600; }
+      button:disabled { opacity: 0.6; cursor: wait; }
+      .quick { display: flex; flex-wrap: wrap; gap: 8px; }
+      .quick button { font-size: 0.85rem; }
+      .badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-weight: 700; text-transform: uppercase; font-size: 0.85rem; }
+      .badge.approved { background: var(--ok-bg); color: var(--ok); }
+      .badge.rejected { background: var(--bad-bg); color: var(--bad); }
+      .badge.escalated { background: var(--warn-bg); color: var(--warn); }
+      .error { background: var(--bad-bg); color: var(--bad); border-radius: 6px; padding: 10px 12px; }
+      .error ul { margin: 4px 0 0; padding-left: 20px; }
+      .msg { border-left: 4px solid var(--primary); padding: 6px 12px; background: var(--bg); }
+      ul { padding-left: 20px; margin: 4px 0; }
+      .muted { color: var(--muted); font-size: 0.9rem; }
+      table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+      th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
+      .scroll { overflow-x: auto; }
+      summary { cursor: pointer; font-weight: 600; }
+      [hidden] { display: none !important; }
+    </style>
   </head>
   <body>
-    <h1>Digital Onboarding</h1>
-    <p>UI coming soon.</p>
+    <main>
+      <h1>Onboarding Digital</h1>
+      <p class="sub">Demostración del orquestador multiagente de apertura de productos.</p>
+
+      <form id="form" class="card" novalidate>
+        <label for="prospect_name">Nombre del prospecto</label>
+        <input id="prospect_name" name="prospect_name" type="text" required minlength="3" maxlength="120" autocomplete="off" />
+
+        <label for="document_id">Cédula (10 dígitos)</label>
+        <input id="document_id" name="document_id" type="text" inputmode="numeric" maxlength="10" required autocomplete="off" />
+
+        <label for="product">Producto</label>
+        <select id="product" name="product" required>
+          <option value="cuenta_ahorros">Cuenta de ahorros</option>
+          <option value="cuenta_corriente">Cuenta corriente</option>
+          <option value="tarjeta_credito">Tarjeta de crédito</option>
+        </select>
+
+        <button id="submit" class="primary" type="submit">Iniciar onboarding</button>
+
+        <h2>Escenarios de demostración</h2>
+        <div class="quick" id="quick"></div>
+      </form>
+
+      <div id="errors" class="error" role="alert" hidden></div>
+      <div id="loading" class="card" hidden>Procesando solicitud... los agentes pueden tardar unos segundos.</div>
+      <section id="result" class="card" hidden></section>
+    </main>
+
+    <script>
+      "use strict";
+      const ENDPOINT = "/api/v1/onboarding/start";
+      const SCENARIOS = [
+        { label: "Aprobado", name: "Maria Fernanda Lopez", doc: "1712345678", product: "cuenta_ahorros" },
+        { label: "Identidad dudosa (termina en 0)", name: "Juan Carlos Perez", doc: "1712345670", product: "cuenta_corriente" },
+        { label: "Identidad no verificada (termina en 9)", name: "Luis Alberto Mora", doc: "1712345679", product: "cuenta_ahorros" },
+        { label: "Riesgo medio (termina en 5)", name: "Ana Lucia Torres", doc: "1712345675", product: "tarjeta_credito" },
+        { label: "Riesgo alto (nombre con 'Riesgo')", name: "Carlos Riesgo Alto", doc: "1712345678", product: "tarjeta_credito" },
+      ];
+      const STATUS_LABEL = { approved: "Aprobado", rejected: "Rechazado", escalated: "Escalado" };
+
+      const $ = (id) => document.getElementById(id);
+      const form = $("form");
+
+      // Small DOM helper: every server string goes through textContent.
+      function el(tag, text, className) {
+        const node = document.createElement(tag);
+        if (text !== undefined && text !== null) node.textContent = String(text);
+        if (className) node.className = className;
+        return node;
+      }
+      function list(items) {
+        const ul = el("ul");
+        for (const item of items) ul.appendChild(el("li", item));
+        return ul;
+      }
+
+      for (const s of SCENARIOS) {
+        const b = el("button", s.label);
+        b.type = "button";
+        b.addEventListener("click", () => {
+          form.prospect_name.value = s.name;
+          form.document_id.value = s.doc;
+          form.product.value = s.product;
+        });
+        $("quick").appendChild(b);
+      }
+
+      function showErrors(lines) {
+        const box = $("errors");
+        box.replaceChildren(el("strong", "No se pudo procesar la solicitud"), list(lines));
+        box.hidden = false;
+      }
+
+      function renderResult(r) {
+        const root = $("result");
+        root.replaceChildren();
+        const badge = el("span", STATUS_LABEL[r.status] || r.status, "badge " + String(r.status));
+        root.appendChild(badge);
+        if (r.onboarding_id) root.appendChild(el("p", "ID: " + r.onboarding_id, "muted"));
+
+        if (r.reasons && r.reasons.length) {
+          root.appendChild(el("h2", "Motivos"));
+          root.appendChild(list(r.reasons));
+        }
+        if (r.mitigation) {
+          root.appendChild(el("h2", "Mitigación"));
+          root.appendChild(el("p", r.mitigation.issue));
+          if (r.mitigation.proposed_actions && r.mitigation.proposed_actions.length) {
+            root.appendChild(el("p", "Acciones propuestas:", "muted"));
+            root.appendChild(list(r.mitigation.proposed_actions));
+          }
+        }
+        const ticket = r.escalation_ticket || r.ticket_id || (r.escalation && r.escalation.ticket_id);
+        if (ticket) root.appendChild(el("p", "Ticket de escalamiento: " + ticket));
+
+        if (r.documents && r.documents.length) {
+          root.appendChild(el("h2", "Documentos requeridos"));
+          root.appendChild(list(r.documents.map((d) => d.name + " - " + d.description)));
+        }
+        if (r.customer_message) {
+          root.appendChild(el("h2", "Mensaje al cliente"));
+          root.appendChild(el("div", r.customer_message, "msg"));
+        }
+        if (r.trace && r.trace.length) {
+          const details = el("details");
+          details.appendChild(el("summary", "Traza paso a paso (" + r.trace.length + ")"));
+          const table = el("table");
+          const head = el("tr");
+          for (const h of ["Agente", "Paso", "Detalle"]) head.appendChild(el("th", h));
+          table.appendChild(head);
+          for (const t of r.trace) {
+            const row = el("tr");
+            row.appendChild(el("td", t.agent));
+            row.appendChild(el("td", t.step));
+            row.appendChild(el("td", t.detail));
+            table.appendChild(row);
+          }
+          const wrap = el("div", null, "scroll");
+          wrap.appendChild(table);
+          details.appendChild(wrap);
+          root.appendChild(details);
+        }
+        root.hidden = false;
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        $("errors").hidden = true;
+        $("result").hidden = true;
+        $("loading").hidden = false;
+        $("submit").disabled = true;
+        const body = {
+          prospect_name: form.prospect_name.value.trim(),
+          document_id: form.document_id.value.trim(),
+          product: form.product.value,
+        };
+        try {
+          const res = await fetch(ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const data = await res.json().catch(() => null);
+          if (res.status === 400 && data && Array.isArray(data.issues)) {
+            showErrors(
+              data.issues.map((i) => {
+                const field = Array.isArray(i.path) && i.path.length ? i.path.join(".") + ": " : "";
+                return field + (i.message || "Valor inválido");
+              }),
+            );
+          } else if (!res.ok || !data) {
+            showErrors(["Error del servidor (" + res.status + "). Intente nuevamente."]);
+          } else {
+            renderResult(data);
+          }
+        } catch {
+          showErrors(["No se pudo contactar al servidor."]);
+        } finally {
+          $("loading").hidden = true;
+          $("submit").disabled = false;
+        }
+      });
+    </script>
   </body>
 </html>
