@@ -103,6 +103,9 @@ async function run(request: OnboardingRequest, options: StartOnboardingOptions):
 
 /** Any failure ends in a human review, never an approval. */
 function failSafe(onboarding_id: string, state: OnboardingState, error: unknown): OnboardingResult {
+  // Full message goes to server logs only (App Service log stream), never to the client.
+  const message = error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error);
+  console.error(`[onboarding ${onboarding_id}] ${failureKind(error)} - ${message}`);
   addTrace(state, "service", "failure", `${failureKind(error)}: ${failureDetail(error)}`, "failed");
   emitStep(state, "orchestrator", "failed", "Automated onboarding failed; escalating to manual review");
 

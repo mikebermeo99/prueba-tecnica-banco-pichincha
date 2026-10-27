@@ -5,10 +5,11 @@
 set -euo pipefail
 
 RG="${RG:-AgenticPlatform}"
-LOCATION="${LOCATION:-eastus2}"
+# The plan lives outside the RG region: this subscription only has App Service quota in chilecentral.
+LOCATION="${LOCATION:-chilecentral}"
 PLAN="${PLAN:-asp-onboarding-agent}"
 APP="${APP:-onboarding-agent-pichincha}"
-SKU="${SKU:-F1}"
+SKU="${SKU:-B1}"
 RUNTIME="${RUNTIME:-NODE:24-lts}"
 ORCHESTRATOR_MODEL="${ORCHESTRATOR_MODEL:-gpt-6.1-terra}"
 SUBAGENT_MODEL="${SUBAGENT_MODEL:-gpt-6-luna}"
