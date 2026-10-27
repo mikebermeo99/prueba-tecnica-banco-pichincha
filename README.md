@@ -60,8 +60,8 @@ Products: `cuenta_ahorros`, `cuenta_corriente`, `tarjeta_credito`.
 | Variable | Default | Purpose |
 |---|---|---|
 | `OPENAI_API_KEY` | - | Required for real runs (not for tests) |
-| `ORCHESTRATOR_MODEL` | `gpt-5.6-terra` | Orchestrator model |
-| `SUBAGENT_MODEL` | `gpt-5.6-luna` | Sub-agent model |
+| `ORCHESTRATOR_MODEL` | `gpt-6.1-terra` | Orchestrator model |
+| `SUBAGENT_MODEL` | `gpt-6-luna` | Sub-agent model |
 | `MAX_TURNS` | `12` | Max agent turns per run |
 | `OPENAI_AGENTS_TRACING` | off | Set to `1` to export traces to OpenAI (contains names and IDs) |
 | `PORT` | `3000` | HTTP port |

@@ -24,7 +24,7 @@ Technical test for the bank. The orchestrator must be an LLM agent (not plain co
 - Orchestrator = LLM agent with sub-agents as tools; policy enforced in code as a guardrail (user rejected code-only orchestrator).
 - `typescript@5.9` chosen over 7.x for toolchain stability.
 - Env loading via Node `--env-file-if-exists` (no dotenv); App Service uses App Settings.
-- Models: small model for sub-agents, large model for orchestrator (user request: "luna" / "terra 6.1"). "terra 6.1" not found in any source; third-party sources list `gpt-5.6-luna` / `gpt-5.6-terra` (no official OpenAI page found). Configurable via `SUBAGENT_MODEL` / `ORCHESTRATOR_MODEL`, defaults `gpt-5.6-luna` / `gpt-5.6-terra`; confirm with `GET /v1/models` once the key is available.
+- Models: small model for sub-agents, large model for orchestrator (user request: "luna 6" / "terra 6.1"). Defaults `gpt-6-luna` / `gpt-6.1-terra`, confirmed on openai.com (Introducing GPT-6.1 Terra, 2026-10-26) and developers.openai.com models/pricing pages. Initial 5.6 defaults were a wrong lookup, corrected per user. Configurable via `SUBAGENT_MODEL` / `ORCHESTRATOR_MODEL`.
 - Tracing export to OpenAI disabled by default (PII: names, document IDs); opt-in via `OPENAI_AGENTS_TRACING=1`.
 - Tools cross-check LLM-supplied args (document_id, name, product) against the request in `RunContext`; mismatch is rejected and traced.
 - Fail-safe: any agent/runtime failure or guardrail trip → `escalated`, never `approved`.
