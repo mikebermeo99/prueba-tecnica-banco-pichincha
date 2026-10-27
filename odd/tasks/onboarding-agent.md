@@ -40,7 +40,7 @@ Technical test for the bank. The orchestrator must be an LLM agent (not plain co
 ## Tasks
 - [x] T1 Scaffold: git, TS, Express 5 app factory, `/health`, static `public/`, vitest + supertest, App Service-ready scripts. Route: inline (mechanical config files). Evidence: RED (missing `src/app.ts` import) → GREEN 2/2 tests; `typecheck` OK; `build` OK; `PORT=3999 node dist/server.js` → `/health` `{"status":"ok"}`. Commit: see git log `feat: scaffold onboarding service`. Note: `.env.example` blocked by local permission settings; env vars go in README.
 - [x] T2 zod schemas + mock tools + `policy.ts` (TDD on rules). Route: delegated writer. Evidence: RED (3 new test files failed on missing modules) → GREEN 39/39 tests (`npx vitest run`); `npm run typecheck` OK; `npm run build` OK. Policy precedence: escalated > rejected (high risk + failed identity goes to compliance). Guardrail allows model to be more conservative only (approved→{approved,escalated}, escalated→{escalated}, rejected→{rejected,escalated}). Commit: see git log `feat: add schemas, mock tools and policy rules`.
-- [ ] T3 Four sub-agents with prompts and typed outputs. Route: TBD.
+- [x] T3 Four sub-agents with prompts and typed outputs (+ SDK tools in `src/tools/index.ts`, scripted `FakeModel` helper in `tests/helpers/fakeModel.ts`). Route: delegated writer. Evidence: tools tests RED (missing module) → GREEN 8/8; agents tests written with implementation then RED re-observed by temporarily moving `src/agents/*.ts` away (missing module) → GREEN 7/7; full `npx vitest run` 54/54; `npm run typecheck` OK; `npm run build` OK. Verified: nested `asTool` runs receive the parent RunContext (same `context` object). Commit: see git log `feat: add specialized sub-agents`.
 - [ ] T4 Orchestrator agent + policy output guardrail + `escalate_to_human`. Route: TBD.
 - [ ] T5 Endpoint wiring + e2e tests per scenario (approved, doubtful identity, high risk) with mocked model. Route: TBD.
 - [ ] T6 `public/index.html` UI + README.
@@ -53,7 +53,7 @@ Technical test for the bank. The orchestrator must be an LLM agent (not plain co
 - `npm run build && npm start` works with `PORT` from env.
 
 ## Progress
-- T1, T2 done. Authored lines on branch: ~700 (T2 incl. tests).
+- T1, T2, T3 done. Authored lines on branch: ~700 (T2 incl. tests).
 
 ## Next step
-T3 (sub-agents). Tests use a scripted fake Model; no API key needed. T7 blocked on Azure params + authorization.
+T4 (orchestrator + guardrail). Tests use a scripted fake Model; no API key needed. T7 blocked on Azure params + authorization.
