@@ -1,6 +1,6 @@
 import { Agent, type OutputGuardrail } from "@openai/agents";
 import { config } from "../config.js";
-import { addTrace, type OnboardingState } from "../context.js";
+import { addTrace, emitStep, type OnboardingState } from "../context.js";
 import { checkOrchestratorDecision } from "../policy/policy.js";
 import { OrchestratorOutputSchema } from "../schemas/index.js";
 import { escalateToHumanTool } from "../tools/index.js";
@@ -18,7 +18,9 @@ export const policyGuardrail: OutputGuardrail<typeof OrchestratorOutputSchema, O
   execute: async ({ agentOutput, context }) => {
     const verdict = checkOrchestratorDecision(context.context, agentOutput);
     if (verdict.tripwire) {
-      addTrace(context.context, "policy_guardrail", "tripwire", verdict.reasons.join(" "));
+      addTrace(context.context, "policy_guardrail", "tripwire", verdict.reasons.join(" "), "failed");
+    } else {
+      emitStep(context.context, "policy_guardrail", "completed", "Decision consistent with bank policy");
     }
     return { tripwireTriggered: verdict.tripwire, outputInfo: verdict.reasons };
   },

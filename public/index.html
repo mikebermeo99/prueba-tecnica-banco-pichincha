@@ -44,6 +44,26 @@
       th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
       .scroll { overflow-x: auto; }
       summary { cursor: pointer; font-weight: 600; }
+      .pipeline { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+      .node { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+      .node .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted); flex: none; }
+      .node .name { font-weight: 600; flex: 1; }
+      .node .state { font-size: 0.85rem; color: var(--muted); }
+      .node[data-state="running"] { border-color: var(--primary); }
+      .node[data-state="running"] .dot { border-color: var(--primary); border-top-color: transparent; animation: spin 0.8s linear infinite; }
+      .node[data-state="running"] .state { color: var(--primary); }
+      .node[data-state="done"] .dot { background: var(--ok); border-color: var(--ok); }
+      .node[data-state="done"] .state { color: var(--ok); }
+      .node[data-state="failed"] { border-color: var(--bad); }
+      .node[data-state="failed"] .dot { background: var(--bad); border-color: var(--bad); }
+      .node[data-state="failed"] .state { color: var(--bad); }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .node[data-state="running"] .dot { animation: none; } }
+      .eventlog { font: 0.8rem/1.4 ui-monospace, monospace; max-height: 220px; overflow-y: auto; margin: 8px 0 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 6px; }
+      .eventlog li { padding: 4px 8px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+      .eventlog li:last-child { border-bottom: 0; }
+      .eventlog .time { color: var(--muted); }
+      .eventlog .failed { color: var(--bad); }
       [hidden] { display: none !important; }
     </style>
   </head>
@@ -73,13 +93,30 @@
       </form>
 
       <div id="errors" class="error" role="alert" hidden></div>
-      <div id="loading" class="card" hidden>Procesando solicitud... los agentes pueden tardar unos segundos.</div>
+      <section id="progress" class="card" aria-live="polite" hidden>
+        <h2 style="margin-top: 0">Progreso de los agentes</h2>
+        <ol id="pipeline" class="pipeline"></ol>
+        <h2>Registro de eventos</h2>
+        <ol id="eventlog" class="eventlog"></ol>
+      </section>
       <section id="result" class="card" hidden></section>
     </main>
 
     <script>
       "use strict";
-      const ENDPOINT = "/api/v1/onboarding/start";
+      const ENDPOINT = "/api/v1/onboarding/stream";
+      const AGENTS = [
+        { id: "orchestrator", label: "Orquestador" },
+        { id: "identity", label: "Verificación de identidad" },
+        { id: "risk", label: "Listas de riesgo" },
+        { id: "documentation", label: "Documentación y políticas" },
+        { id: "response", label: "Respuesta al cliente" },
+        { id: "policy", label: "Guardrail de política bancaria" },
+      ];
+      const AGENT_LABEL = Object.fromEntries(AGENTS.map((a) => [a.id, a.label]));
+      const STATE_LABEL = { pending: "pendiente", running: "en curso", done: "completado", failed: "falló" };
+      const PHASE_STATE = { started: "running", completed: "done", failed: "failed" };
+      const nodes = {};
       const SCENARIOS = [
         { label: "Aprobado", name: "Maria Fernanda Lopez", doc: "1712345678", product: "cuenta_ahorros" },
         { label: "Identidad dudosa (termina en 0)", name: "Juan Carlos Perez", doc: "1712345670", product: "cuenta_corriente" },
@@ -114,6 +151,67 @@
           form.product.value = s.product;
         });
         $("quick").appendChild(b);
+      }
+
+      function resetProgress() {
+        $("pipeline").replaceChildren();
+        $("eventlog").replaceChildren();
+        for (const a of AGENTS) {
+          const li = el("li", null, "node");
+          li.appendChild(el("span", null, "dot"));
+          li.appendChild(el("span", a.label, "name"));
+          const state = el("span", STATE_LABEL.pending, "state");
+          li.appendChild(state);
+          li.dataset.state = "pending";
+          nodes[a.id] = { li, state };
+          $("pipeline").appendChild(li);
+        }
+        $("progress").hidden = false;
+      }
+
+      function setNodeState(agent, value) {
+        const node = nodes[agent];
+        if (!node) return;
+        node.li.dataset.state = value;
+        node.state.textContent = STATE_LABEL[value];
+      }
+
+      function handleStep(ev) {
+        const next = PHASE_STATE[ev.phase];
+        if (next) setNodeState(ev.agent, next);
+        const li = el("li", null, ev.phase === "failed" ? "failed" : "");
+        const time = new Date(ev.at);
+        const stamp = isNaN(time) ? "--:--:--" : time.toLocaleTimeString("es-EC", { hour12: false });
+        li.appendChild(el("span", stamp + " ", "time"));
+        li.appendChild(el("strong", (AGENT_LABEL[ev.agent] || ev.agent) + " "));
+        li.appendChild(document.createTextNode(String(ev.detail)));
+        const log = $("eventlog");
+        log.appendChild(li);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      // Parses SSE frames ("data: <json>\n\n"); chunks can split frames anywhere.
+      function createSseParser(onEvent) {
+        let buffer = "";
+        return (chunk) => {
+          buffer += chunk.replace(/\r\n/g, "\n");
+          let idx;
+          while ((idx = buffer.indexOf("\n\n")) !== -1) {
+            const frame = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + 2);
+            const data = frame
+              .split("\n")
+              .filter((l) => l.startsWith("data:"))
+              .map((l) => l.slice(5).replace(/^ /, ""))
+              .join("\n");
+            if (!data) continue;
+            try {
+              onEvent(JSON.parse(data));
+            } catch {
+              /* ignore malformed frame */
+            }
+          }
+        };
       }
 
       function showErrors(lines) {
@@ -178,36 +276,61 @@
         event.preventDefault();
         $("errors").hidden = true;
         $("result").hidden = true;
-        $("loading").hidden = false;
+        $("progress").hidden = true;
         $("submit").disabled = true;
         const body = {
           prospect_name: form.prospect_name.value.trim(),
           document_id: form.document_id.value.trim(),
           product: form.product.value,
         };
+        let finished = false;
         try {
           const res = await fetch(ENDPOINT, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
           });
-          const data = await res.json().catch(() => null);
-          if (res.status === 400 && data && Array.isArray(data.issues)) {
+          if (res.status === 400) {
+            const data = await res.json().catch(() => null);
             showErrors(
-              data.issues.map((i) => {
-                const field = Array.isArray(i.path) && i.path.length ? i.path.join(".") + ": " : "";
-                return field + (i.message || "Valor inválido");
-              }),
+              data && Array.isArray(data.issues)
+                ? data.issues.map((i) => {
+                    const field = Array.isArray(i.path) && i.path.length ? i.path.join(".") + ": " : "";
+                    return field + (i.message || "Valor inválido");
+                  })
+                : ["Solicitud inválida."],
             );
-          } else if (!res.ok || !data) {
-            showErrors(["Error del servidor (" + res.status + "). Intente nuevamente."]);
-          } else {
-            renderResult(data);
+            return;
           }
+          if (!res.ok || !res.body) {
+            showErrors(["Error del servidor (" + res.status + "). Intente nuevamente."]);
+            return;
+          }
+          resetProgress();
+          const parse = createSseParser((ev) => {
+            if (ev.type === "step") {
+              handleStep(ev);
+            } else if (ev.type === "result") {
+              finished = true;
+              // Anything still running when the result arrives did not finish cleanly.
+              for (const [id, n] of Object.entries(nodes)) {
+                if (n.li.dataset.state === "running") setNodeState(id, "failed");
+              }
+              renderResult(ev.result);
+            }
+          });
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            parse(decoder.decode(value, { stream: true }));
+          }
+          parse(decoder.decode() + "\n\n");
+          if (!finished) showErrors(["La conexión se cerró antes de recibir el resultado."]);
         } catch {
           showErrors(["No se pudo contactar al servidor."]);
         } finally {
-          $("loading").hidden = true;
           $("submit").disabled = false;
         }
       });

@@ -19,10 +19,13 @@ describe("app", () => {
 });
 
 describe("front end", () => {
-  it("serves the onboarding form wired to the start endpoint", async () => {
+  it("serves the onboarding form wired to the stream endpoint", async () => {
     const res = await request(createApp()).get("/");
 
-    expect(res.text).toContain("/api/v1/onboarding/start");
+    expect(res.text).toContain("/api/v1/onboarding/stream");
+    for (const agent of ["Orquestador", "Verificación de identidad", "Listas de riesgo"]) {
+      expect(res.text).toContain(agent);
+    }
     for (const field of ["prospect_name", "document_id", "product"]) {
       expect(res.text).toContain(`name="${field}"`);
     }

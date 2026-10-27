@@ -44,7 +44,9 @@ Technical test for the bank. The orchestrator must be an LLM agent (not plain co
 - [x] T4 Orchestrator agent + policy output guardrail + `escalate_to_human` + `src/onboarding/service.ts` (fail-safe). Route: delegated writer. Evidence: service tests RED (missing `service.js`) → GREEN; guardrail tests with real `Runner` + scripted `FakeModelProvider` (nested `asTool` runs work: provider and RunContext are inherited) pass; full `npx vitest run` 64/64; `npm run typecheck` OK; `npm run build` OK. Notes: `Agent.outputGuardrails` takes plain `{name, execute}` (not `defineOutputGuardrail` result); tripwire surfaces as `OutputGuardrailTripwireTriggered`, caught in service → escalated + ticket. Commit: see git log `feat: add orchestrator agent with policy guardrail`.
 - [x] T5 Endpoint wiring + e2e tests per scenario (approved, doubtful identity, high risk, LLM-claims-approved) with scripted fake models. Route: delegated writer. Evidence: endpoint tests RED (8 failed: route missing) → GREEN; full `npx vitest run` 73/73; `npm run typecheck` OK; `npm run build` OK. `createApp({ onboarding })` injects a model provider; malformed JSON → 400. Fully scripted nested `asTool` fake model proved practical (provider is inherited by nested runs), so no runner seam was needed. Commit: see git log `feat: expose onboarding start endpoint`.
 - [x] T6 `public/index.html` UI + README + `.atl/` in .gitignore. Route: delegated writer. Evidence: front-end test RED (form fields/endpoint missing from placeholder page) -> GREEN; full `npx vitest run`, `npm run typecheck`, `npm run build` OK. UI renders server text via `textContent` only. Commit: see git log `feat: add onboarding demo UI and README`.
-- [ ] T7 Azure App Service deploy script (`az`), pending user-provided params and authorization.
+- [ ] T7 Azure App Service deploy script (`az`). Target: subscription Club Susazon, RG `AgenticPlatform` (eastus2), plan `asp-onboarding-agent`, app `onboarding-agent-pichincha`, NODE:24-lts. Script committed (`chore: add Azure App Service deploy script`, `bash -n` OK). First run FAILED: F1 quota is 0 in eastus2 for this subscription ("Current Limit (F1 VMs): 0"); nothing was created. Awaiting user decision (B1 / other region / quota request). Note: RG also holds `agentic-digevo` (AIServices / Foundry, eastus) with project `pi-monkeys`.
+
+- [x] T8 Real-time processing status in the UI: `POST /api/v1/onboarding/stream` (SSE over fetch) emitting per-run progress events (agent started/completed/failed, tool calls, guardrail, final result); UI pipeline of 5 agents with live state + event log. `POST /start` contract unchanged. Events scoped per run via RunContext (no cross-request mixing). Route: delegated writer. Evidence: RED (7 failed: no `onEvent`, no `/stream`, no events schema, UI still on `/start`) -> GREEN; `npx vitest run` 83/83; `npm run typecheck` OK; `npm run build` OK. Mechanism: SDK per-agent lifecycle events (`agent_start`/`agent_end`) fire for nested `asTool` runs too and receive the per-run RunContext, so `src/onboarding/progress.ts` dispatches via `context.emit` (no state on the singleton agents); steps/failures come from `addTrace` (single source for trace + events). Commit: see git log `feat: stream real-time onboarding progress to the UI`.
 
 ## Acceptance criteria
 - Valid request returns `{ status, reasons[], mitigation?, documents?, customer_message, trace[] }`.
@@ -53,7 +55,7 @@ Technical test for the bank. The orchestrator must be an LLM agent (not plain co
 - `npm run build && npm start` works with `PORT` from env.
 
 ## Progress
-- T1-T6 done. Authored lines on branch: ~700 (T2 incl. tests).
+- T1-T6, T8 done. Authored lines on branch: ~700 (T2 incl. tests).
 
 ## Next step
-T7. Tests use a scripted fake Model; no API key needed. T7 blocked on Azure params + authorization.
+T7 (blocked). Tests use a scripted fake Model; no API key needed. T7 blocked on Azure params + authorization.

@@ -91,6 +91,17 @@ curl -X POST http://localhost:3000/api/v1/onboarding/start \
 
 Response: `{ onboarding_id, status, reasons[], mitigation, documents[], customer_message, trace[] }`. Invalid input returns `400 { error: "invalid_request", issues }`.
 
+## Real-time progress (SSE)
+
+`POST /api/v1/onboarding/stream` takes the same body as `/start` and answers `text/event-stream` (invalid bodies still get `400` JSON before streaming starts). Each frame is `data: <json>\n\n`, and the stream ends after the `result` event:
+
+```
+data: {"type":"step","at":"<ISO>","agent":"identity","phase":"started","detail":"..."}
+data: {"type":"result","result":{ ...same payload as /start... }}
+```
+
+`agent` is one of `orchestrator | identity | risk | documentation | response | policy`; `phase` is `started | progress | completed | failed`. Use `curl -N` to watch it. Behind a reverse proxy, disable response buffering (the server sends `X-Accel-Buffering: no`). Events are scoped to each run through the run state, so concurrent requests never mix.
+
 ## Tests
 
 Tests use a scripted fake model (`tests/helpers/fakeModel.ts`), so they need no API key or network. They cover schemas, mocks, policy, tool allowlists, the guardrail, the service fail-safe and the endpoint scenarios.

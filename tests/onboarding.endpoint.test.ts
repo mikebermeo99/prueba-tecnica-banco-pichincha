@@ -1,6 +1,7 @@
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
+import { ProgressEventSchema } from "../src/schemas/index.js";
 import { scriptedProvider } from "./helpers/scenarios.js";
 
 const valid = { prospect_name: "Ana Perez", document_id: "1712345678", product: "cuenta_ahorros" };
@@ -59,5 +60,44 @@ describe("POST /api/v1/onboarding/start", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("escalated");
+  });
+});
+
+describe("POST /api/v1/onboarding/stream", () => {
+  const stream = (body: unknown, behavior?: Parameters<typeof scriptedProvider>[0]) =>
+    request(createApp({ onboarding: { modelProvider: scriptedProvider(behavior).provider } }))
+      .post("/api/v1/onboarding/stream")
+      .send(body as object);
+
+  it("returns 400 JSON before streaming for an invalid body", async () => {
+    const res = await stream({ ...valid, document_id: "1" });
+
+    expect(res.status).toBe(400);
+    expect(res.headers["content-type"]).toMatch(/application\/json/);
+    expect(res.body.issues.length).toBeGreaterThan(0);
+  });
+
+  it("streams schema-valid SSE frames ending with the result", async () => {
+    const res = await stream(valid).buffer(true).parse((r, cb) => {
+      let data = "";
+      r.setEncoding("utf8");
+      r.on("data", (c: string) => (data += c));
+      r.on("end", () => cb(null, data));
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/text\/event-stream/);
+    expect(res.headers["cache-control"]).toBe("no-cache");
+    expect(res.headers["x-accel-buffering"]).toBe("no");
+    const frames = (res.body as string).split("\n\n").filter(Boolean);
+    const events = frames.map((f) => {
+      expect(f.startsWith("data: ")).toBe(true);
+      return ProgressEventSchema.parse(JSON.parse(f.slice(6)));
+    });
+    expect(events.length).toBeGreaterThan(2);
+    const last = events.at(-1);
+    expect(last?.type).toBe("result");
+    expect(last?.type === "result" && last.result.status).toBe("approved");
+    expect(events.filter((e) => e.type === "result")).toHaveLength(1);
   });
 });

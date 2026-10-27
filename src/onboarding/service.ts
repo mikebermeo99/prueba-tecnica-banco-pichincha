@@ -8,18 +8,22 @@ import {
 } from "@openai/agents";
 import { orchestratorAgent } from "../agents/orchestrator.agent.js";
 import { config } from "../config.js";
-import { addTrace, type OnboardingState } from "../context.js";
+import { addTrace, emitStep, type OnboardingState } from "../context.js";
 import { evaluatePolicy } from "../policy/policy.js";
-import type { Mitigation, OnboardingRequest, OnboardingResult } from "../schemas/index.js";
+import type { Mitigation, OnboardingRequest, OnboardingResult, ProgressEvent } from "../schemas/index.js";
 import { openEscalation } from "../tools/index.js";
+import { attachProgressHooks } from "./progress.js";
 
 // Global switch too, so nested agent-tool runs never export traces unless opted in.
 setTracingDisabled(!config.tracingEnabled);
+attachProgressHooks();
 
 export interface StartOnboardingOptions {
   /** Injected in tests to avoid the network. */
   modelProvider?: ModelProvider;
   maxTurns?: number;
+  /** Receives this run's progress events (steps, then a final `result`). */
+  onEvent?: (event: ProgressEvent) => void;
 }
 
 const FAILSAFE_MITIGATION: Mitigation = {
@@ -49,8 +53,18 @@ export async function startOnboarding(
   request: OnboardingRequest,
   options: StartOnboardingOptions = {},
 ): Promise<OnboardingResult> {
+  const result = await run(request, options);
+  try {
+    options.onEvent?.({ type: "result", result });
+  } catch {
+    // a failing listener must not change the outcome
+  }
+  return result;
+}
+
+async function run(request: OnboardingRequest, options: StartOnboardingOptions): Promise<OnboardingResult> {
   const onboarding_id = randomUUID();
-  const state: OnboardingState = { request, trace: [] };
+  const state: OnboardingState = { request, trace: [], emit: options.onEvent };
   addTrace(state, "service", "start", `onboarding ${onboarding_id} for ${request.product}`);
 
   const runner = new Runner({
@@ -89,7 +103,8 @@ export async function startOnboarding(
 
 /** Any failure ends in a human review, never an approval. */
 function failSafe(onboarding_id: string, state: OnboardingState, error: unknown): OnboardingResult {
-  addTrace(state, "service", "failure", `${failureKind(error)}: ${failureDetail(error)}`);
+  addTrace(state, "service", "failure", `${failureKind(error)}: ${failureDetail(error)}`, "failed");
+  emitStep(state, "orchestrator", "failed", "Automated onboarding failed; escalating to manual review");
 
   const policy = evaluatePolicy(state);
   const reasons = [

@@ -42,7 +42,7 @@ function crossCheck(
   }
   if (mismatches.length === 0) return null;
 
-  addTrace(state, toolName, "rejected_tool_call", `Arguments do not match request: ${mismatches.join(", ")}`);
+  addTrace(state, toolName, "rejected_tool_call", `Arguments do not match request: ${mismatches.join(", ")}`, "failed");
   return {
     error: `Rejected: ${mismatches.join(", ")} does not match the onboarding request. Use the values from your instructions.`,
   };
