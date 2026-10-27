@@ -118,16 +118,25 @@ export const prepareDocumentationTool = tool({
   },
 });
 
+export function openEscalation(
+  state: OnboardingState,
+  agent: string,
+  reason: string,
+  severity: "medium" | "high",
+): string {
+  const ticket_id = `ESC-${randomUUID().slice(0, 8).toUpperCase()}`;
+  state.escalation = { ticket_id, reason, severity };
+  addTrace(state, agent, "escalate_to_human", `${ticket_id} severity=${severity}: ${reason}`);
+  return ticket_id;
+}
+
 export const escalateToHumanTool = tool({
   name: "escalate_to_human",
   description: "Open an escalation ticket for manual review by a human analyst. Returns the ticket_id.",
   parameters: z.object({ reason: z.string(), severity: z.enum(["medium", "high"]) }),
   execute: ({ reason, severity }, ctx: Ctx) => {
     const state = requireState(ctx);
-    const ticket_id = `ESC-${randomUUID().slice(0, 8).toUpperCase()}`;
-
-    state.escalation = { ticket_id, reason, severity };
-    addTrace(state, "orchestrator", "escalate_to_human", `${ticket_id} severity=${severity}: ${reason}`);
+    const ticket_id = openEscalation(state, "orchestrator", reason, severity);
     return { ticket_id, severity };
   },
 });

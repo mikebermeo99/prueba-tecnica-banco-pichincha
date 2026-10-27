@@ -73,3 +73,16 @@ export function toolResults(request: ModelRequest): Record<string, unknown> {
   }
   return results;
 }
+
+/** Text of the last user message of a request (the tool input for nested agent runs). */
+export function userText(request: ModelRequest): string {
+  if (typeof request.input === "string") return request.input;
+  for (const item of [...request.input].reverse()) {
+    if (item.type === "message" && item.role === "user") {
+      return typeof item.content === "string"
+        ? item.content
+        : item.content.map((c) => ("text" in c ? c.text : "")).join("");
+    }
+  }
+  return "";
+}
